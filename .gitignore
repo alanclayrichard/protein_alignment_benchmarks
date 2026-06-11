@@ -1,0 +1,16 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+
+# mmseqs intermediates
+work/
+
+# vendored upstream repo's git metadata
+data/ThermoMPNN/
+
+# proteingym dms data (~1GB, re-fetch with src/download_proteingym.sh)
+data/proteingym/
+
+# bioreason-pro GO test data (~15MB, re-fetch with src/download_bioreason_go.sh)
+data/bioreason_go/

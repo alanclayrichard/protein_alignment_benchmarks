@@ -1,0 +1,5 @@
+torch>=2.0
+pandas>=2.0
+pyarrow>=14.0
+huggingface_hub>=0.20
+# seq filtering uses the mmseqs cli (MMseqs2), install separately: brew install mmseqs2
