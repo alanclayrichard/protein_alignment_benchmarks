@@ -1,61 +1,98 @@
 # protein-alignment-benchmarks
 
-leakage-free qfit sequences to align a sequence model on, plus three benchmarks
-to test if alignment improves prediction: thermompnn ddG, proteingym dms fitness,
-and bioreason-pro GO function (cafa5 setup).
+build a **leakage-free** subset of uniref90 to align/train a protein sequence model
+on, then test whether alignment improves prediction on functional benchmarks
+(thermompnn ddG, proteingym dms fitness, bioreason-pro GO function).
 
-leakage guarantee: no sequence in an `align*.csv` is >20% identical to any
-sequence in the **test set** of the benchmark it's "safe" from, so aligning on
-it can't leak that benchmark's eval. we only filter against test seqs (eval is
-test-only); leakage into a benchmark's train split is irrelevant and filtering
-it just over-prunes qfit. one safe set per benchmark, plus one safe from all
-three (kept / 37,038 qfit seqs):
+leakage rule: a uniref90 seq leaks a benchmark if one of its **test** seqs aligns
+over >80% of that test seq's length at >20% identity (`COV`/`MIN_ID`,
+`--cov-mode 2`) — i.e. the test protein's content is present in the uniref seq, so
+training on it would leak the eval. we scan test seqs only (eval is test-only).
 
-- `align_ddg_safe.csv` — safe from the ddG test set (35,466)
-- `align_dms_safe.csv` — safe from the dms set (24,490; proteingym is eval-only)
-- `align_go_safe.csv` — safe from the GO test set (18,010)
-- `align.csv` — safe from all three test sets (13,667)
+## pipeline
+
+```
+data/download_*.sh    download a benchmark's test set            -> data/
+format_benchmark.py   a benchmark's test set -> uniform fasta    -> data/formatted/<bench>.fasta
+scan_leakage.py       <bench>.fasta vs uniref90 -> leaked ids     -> leakage/<bench>.txt
+build_trainset.py     uniref90 minus leaked ids, sampled         -> trainset.fasta
+datasets.py           load trainset + benchmarks as torch datasets
+```
+
+uniref90 is never copied: the leakage lists are just ids, and the training set is
+whatever sampled size you ask for.
 
 ## setup
 
-```bash
-uv venv --python 3.11 .venv
-uv pip install --python .venv -r requirements.txt
-sh src/download_ddg.sh                                               # ddG data
-sh src/download_proteingym.sh                                        # dms data (~1GB)
-sh src/download_bioreason_go.sh                                      # GO data (~15MB)
-```
-
-needs the `mmseqs` cli on PATH (`brew install mmseqs2`).
-
-## build
+uniref90 is downloaded separately — point `.env` at it (and at the mmseqs binary).
+copy `.env.example` to `.env` and edit; `config.py` auto-loads it. then:
 
 ```bash
-.venv/bin/python src/build_train_set.py   # writes the four align*.csv
+uv sync                                  # create .venv with core deps (add --extra torch for datasets.py)
+source .venv/bin/activate                # then plain `python ...` uses the venv
+sh data/download_ddg.sh && sh data/download_proteingym.sh && sh data/download_bioreason_go.sh
 ```
 
-for each benchmark: collect its test seqs, mmseqs-search qfit against them
-(sensitive, conservative), drop any qfit seq with a >20% identity hit.
+mmseqs2 isn't pip-installable — set `MMSEQS` to its path, or `brew install mmseqs2`.
+
+## run
+
+```bash
+python src/format_benchmark.py           # all benchmarks -> data/formatted/*.fasta
+python src/scan_leakage.py               # scan each vs uniref90 -> leakage/*.txt   (the slow step)
+python src/build_trainset.py             # uniref90 - leaked ids, sampled -> trainset.fasta
+```
+
+sampling lives in `.env`: `TRAIN_SAMPLE=0.05` keeps a random 5%, `TRAIN_SIZE=1000000`
+caps the count — so the training set is as big as you want without pulling all ~121M.
+
 
 ## use
 
+needs torch (`uv sync --extra torch`), with the venv activated:
+
 ```python
 import sys; sys.path.insert(0, "src")
-from datasets import QfitDataset, DdgDataset, DmsDataset, GoDataset
+from datasets import TrainSet, DdgDataset, DmsDataset, GoDataset
 
-align = QfitDataset()                                  # {sequence, uniprot, pdb, chain}
-
-ddg = DdgDataset(dataset="megascale")                  # filter optional
-# {sequence, mutation, ddg, pdb, dataset}
-
-dms = DmsDataset(assay="Binding")                      # or dms_id="...", filters optional
-# {sequence, mutation, score, assay, dms_id, uniprot}
-
-go = GoDataset()                                       # temporal-holdout test set
-# {sequence, protein_id, organism, go_bp, go_mf, go_cc}
+train = TrainSet()                         # {sequence, id} — the leakage-free align set
+ddg   = DdgDataset(dataset="megascale")    # {sequence, mutation, ddg, pdb, dataset}
+dms   = DmsDataset(assay="Binding")        # {sequence, mutation, score, assay, dms_id, uniprot}
+go    = GoDataset()                        # {sequence, protein_id, organism, go_bp, go_mf, go_cc}
 ```
 
-`QfitDataset(path=...)` to pick a different align set. `DmsDataset` assay is one
-of Activity|Binding|Expression|OrganismalFitness|Stability — filter it (or a
-`dms_id`), loading all ~2.7M rows is heavy. `GoDataset` is the GO temporal
-holdout eval set; go_bp/go_mf/go_cc are GO ids per ontology aspect.
+`DmsDataset` filters by assay (Activity|Binding|Expression|OrganismalFitness|Stability)
+or `dms_id` — loading all ~2.7M rows is heavy.
+
+## datasets
+
+| benchmark | source | unique test seqs | median len |
+|---|---|---|---|
+| ddg | thermompnn megascale + fireprot | 28,227 | 57 aa |
+| dms | proteingym DMS_substitutions | 187 | 222 aa |
+| go  | bioreason-pro (cafa5 temporal holdout) | 8,528 | 588 aa |
+
+align pool: uniref90, 121,389,642 seqs. 
+
+## adding a benchmark
+
+1. add `data/download_<name>.sh` to fetch its test set.
+2. add an entry to `ADAPTERS` in `src/format_benchmark.py` (name -> fn yielding its
+   test seqs), then `python src/format_benchmark.py <name>`.
+3. `python src/scan_leakage.py` — only the new benchmark is scanned (the rest are
+   cached; `FORCE=1` rescans).
+4. `python src/build_trainset.py` — rebuilds the training set leakage-free against
+   every benchmark, now including the new one.
+
+## running the scan at scale
+
+`scan_leakage.py` is CPU-bound mmseqs over ~121M sequences, so run it on a machine
+with plenty of cores + RAM (16+ cores helps a lot). set `THREADS`/`SPLIT_MEM` in
+`.env` to fit the box, point `UNIREF_*` at your uniref90, and detach it:
+
+```bash
+nohup python src/scan_leakage.py > "$LEAKAGE_DIR/scan.log" 2>&1 &
+```
+
+it's resumable — each benchmark's list is written as it finishes, and a re-run
+skips lists that already exist.

@@ -1,16 +1,24 @@
-# Python / uv
+# python / uv
 .venv/
 __pycache__/
 *.pyc
 
-# mmseqs intermediates
+# local config + os cruft
+.env
+.DS_Store
+
+# downloaded + formatted benchmark data (keep the download scripts though)
+data/*
+!data/*.sh
+
+# uniref90 download, mmseqs scratch, tmp
+uniref/
 work/
+*_tmp/
+*.tmp
 
-# vendored upstream repo's git metadata
-data/ThermoMPNN/
+# outputs: leakage lists + generated training set
+leakage/
+trainset.fasta
 
-# proteingym dms data (~1GB, re-fetch with src/download_proteingym.sh)
-data/proteingym/
-
-# bioreason-pro GO test data (~15MB, re-fetch with src/download_bioreason_go.sh)
-data/bioreason_go/
+.actlignore

@@ -1,36 +1,31 @@
-"""qfit align set + ddG / dms / GO benchmarks for representation alignment eval."""
+# torch datasets: the leakage-free training set + the ddG / dms / GO eval benchmarks.
 import ast, csv, sys
 from pathlib import Path
 import pandas as pd
 from torch.utils.data import Dataset
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import config as c
+
 csv.field_size_limit(sys.maxsize)
-repo = Path(__file__).resolve().parent.parent
+repo = c.repo
 
 
-class QfitDataset(Dataset):
-    """leakage-free qfit seqs to align on. item: sequence, uniprot, pdb, chain."""
+class TrainSet(Dataset):
+    # the generated leakage-free training set (make it with build_trainset.py).
+    # item: sequence, id. it's already sampled to size, so we load it in memory.
+    def __init__(self, path=c.trainset):
+        self.items = [{"sequence": s, "id": a} for a, s in c.iter_fasta(path)]
 
-    def __init__(self, path=repo / "align.csv"):
-        with open(path, newline="") as f:
-            self.rows = list(csv.DictReader(f))
+    def __len__(self): return len(self.items)
 
-    def __len__(self): return len(self.rows)
-
-    def __getitem__(self, i):
-        r = self.rows[i]
-        return {"sequence": r["sequence"], "uniprot": r["uniprot_id"],
-                "pdb": r["pdb_code"], "chain": r["chain_id"]}
+    def __getitem__(self, i): return self.items[i]
 
 
 class DdgDataset(Dataset):
-    """thermompnn ddG test set. item: sequence, mutation, ddg, pdb, dataset.
-
-    dataset is megascale|fireprot (pass to filter). sign follows thermompnn
-    (megascale ddg = -ddG_ML).
-    """
-
-    files = {  # dataset -> test csv under data_all
+    # thermompnn ddG test set. item: sequence, mutation, ddg, pdb, dataset.
+    # dataset is megascale|fireprot (pass to filter); sign follows thermompnn.
+    files = {
         "megascale": "testing/mega_test.csv",
         "fireprot":  "testing/fireprot_test.csv",
     }
@@ -69,11 +64,8 @@ class DdgDataset(Dataset):
 
 
 class GoDataset(Dataset):
-    """bioreason-pro GO function test set (cafa5 setup, temporal-holdout eval).
-    item: sequence, protein_id, organism, go_bp, go_mf, go_cc (lists of GO ids,
-    one per ontology aspect).
-    """
-
+    # bioreason-pro GO function test set (cafa5, temporal holdout).
+    # item: sequence, protein_id, organism, go_bp, go_mf, go_cc (lists of GO ids).
     def __init__(self, data_dir=repo / "data" / "bioreason_go"):
         df = pd.read_parquet(Path(data_dir) / "test" / "data" / "test-00000-of-00001.parquet")
         self.items = [{"sequence": str(r.sequence).strip().upper(),
@@ -87,19 +79,14 @@ class GoDataset(Dataset):
     def __getitem__(self, i): return self.items[i]
 
 
-def _terms(v):  # go column: array (gogpt) or list-repr string (test), nan if absent
+def _terms(v):  # go column: array or list-repr string, nan if absent
     if isinstance(v, str): return ast.literal_eval(v) if v.startswith("[") else []
     return list(v) if hasattr(v, "__len__") else []
 
 
 class DmsDataset(Dataset):
-    """proteingym dms data. item: sequence, mutation, score, assay, dms_id, uniprot.
-
-    score is functional-assay fitness; assay is the coarse selection type
-    (Activity|Binding|Expression|OrganismalFitness|Stability). pass assay or
-    dms_id to filter (loading all ~2.7M rows is heavy).
-    """
-
+    # proteingym dms data. item: sequence, mutation, score, assay, dms_id, uniprot.
+    # pass assay (Activity|Binding|Expression|OrganismalFitness|Stability) or dms_id to filter.
     def __init__(self, assay=None, dms_id=None, data_dir=repo / "data" / "proteingym"):
         data_dir = Path(data_dir)
         self.items = []

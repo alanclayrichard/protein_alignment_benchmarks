@@ -1,0 +1,21 @@
+[project]
+name = "protein-alignment-benchmarks"
+version = "0.1.0"
+description = "leakage-free uniref90 training sets for protein representation-alignment benchmarks"
+requires-python = ">=3.10"
+# core deps: enough to download, format, scan, and build the training set
+dependencies = [
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "huggingface-hub>=0.20",
+]
+
+# torch is only needed to load the torch datasets (datasets.py): `uv sync --extra torch`
+[project.optional-dependencies]
+torch = ["torch>=2.0"]
+
+# scripts repo, not an installable package — uv just manages the venv + deps
+[tool.uv]
+package = false
+
+# mmseqs2 is not pip-installable — set MMSEQS to its path, or `brew install mmseqs2`
