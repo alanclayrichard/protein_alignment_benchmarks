@@ -36,10 +36,10 @@ def leakers(pool, target, tmp):  # ids in pool [(id,seq)] that cover >COV of a t
     return {ln.split("\t")[0] for ln in open(m8) if float(ln.split("\t")[2]) > c.min_id}
 
 
-def reservoir(n, exclude, rng):  # uniform-random n uniref seqs not already used; one pass over the fasta
+def reservoir(n, exclude, rng):  # uniform-random n in-range uniref seqs not already used; one pass over the fasta
     res, seen = [], 0
     for a, s in c.iter_fasta(c.uniref_fa):
-        if a in exclude: continue
+        if a in exclude or not (c.min_len <= len(s) <= c.max_len): continue
         seen += 1
         if len(res) < n:
             res.append((a, s))

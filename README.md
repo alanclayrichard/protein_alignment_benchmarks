@@ -45,7 +45,7 @@ python src/format_benchmark.py           # all benchmarks -> data/formatted/*.fa
 python src/build_trainset.py             # sample uniref90, drop leakers, repeat -> trainset.fasta
 ```
 
-`.env` controls it: `QUOTA` is how many leakage-free seqs to collect for the training set, `OVERSAMPLE` how much extra to draw each round to cover dropped leakers, `GPU=1` runs the check on a cuda gpu.
+`.env` controls it: `QUOTA` is how many leakage-free seqs to collect for the training set, `OVERSAMPLE` how much extra to draw each round to cover dropped leakers, `MIN_LEN`/`MAX_LEN` bound the sampled protein length (drops fragments + giant non-physiological seqs), `GPU=1` runs the check on a cuda gpu.
 
 ## use
 

@@ -35,6 +35,8 @@ min_id   = float(os.environ.get("MIN_ID", "0.2"))   # >this identity to a test s
 # sampling: collect this many leakage-free seqs, oversampling each round to cover dropped leakers
 quota      = int(os.environ.get("QUOTA", "1000000"))
 oversample = float(os.environ.get("OVERSAMPLE", "1.5"))
+min_len    = int(os.environ.get("MIN_LEN", "20"))      # only sample proteins with this many residues..
+max_len    = int(os.environ.get("MAX_LEN", "1000"))    # ..up to this many (drops fragments + giant seqs)
 seed       = int(os.environ.get("SEED", "0"))
 
 
