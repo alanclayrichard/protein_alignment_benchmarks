@@ -3,7 +3,7 @@ name = "protein-alignment-benchmarks"
 version = "0.1.0"
 description = "leakage-free uniref90 training sets for protein representation-alignment benchmarks"
 requires-python = ">=3.10"
-# core deps: enough to download, format, scan, and build the training set
+# core deps: enough to download, format, and build the training set
 dependencies = [
     "pandas>=2.0",
     "pyarrow>=14.0",

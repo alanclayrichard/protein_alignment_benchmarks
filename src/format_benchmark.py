@@ -1,8 +1,7 @@
-# format functional-benchmark TEST sets into uniform fastas for leakage scanning.
-# each benchmark = one ADAPTERS entry: name -> fn yielding its test seqs (from anywhere).
-# writes deduped, uppercased seqs to <formatted>/<name>.fasta.
-# add a benchmark: add an entry (+ a data/download_<name>.sh), then
-#   python src/format_benchmark.py <name>
+# format functional-benchmark test sets into uniform fastas for leakage checking.
+# each benchmark = one ADAPTERS entry (name -> fn yielding its test seqs); write() dedups +
+# uppercases to <formatted>/<name>.fasta. add a benchmark: add an adapter (+ a
+# data/download_<name>.sh), then `python src/format_benchmark.py <name>`.
 import csv, sys
 from pathlib import Path
 import pandas as pd
@@ -37,7 +36,24 @@ def go():  # bioreason-pro temporal-holdout test seqs
         if s: yield str(s).strip().upper()
 
 
-ADAPTERS = {"ddg": ddg, "dms": dms, "go": go}  # name -> test-seq iterator
+def allobench():  # allobench allosteric/active-site proteins (one seq per row)
+    yield from _col(c.data / "allobench" / "AlloBench.csv", "sequence")
+
+
+def ppi():  # human ppi gold-standard: sequences of every protein in the test pairs
+    d = c.data / "ppi"
+    accs = {a for f in d.glob("Intra*_rr.txt") for line in open(f) for a in line.split()}
+    for a, s in c.iter_fasta(d / "human_swissprot_oneliner.fasta"):
+        if a in accs and s: yield s.upper()
+
+
+def passerrank():  # passerrank allosteric proteins (uniprot seqs fetched from asd accessions)
+    for _a, s in c.iter_fasta(c.data / "passerrank" / "passerrank.fasta"):
+        if s: yield s.upper()
+
+
+# name -> test-seq iterator
+ADAPTERS = {"ddg": ddg, "dms": dms, "go": go, "allobench": allobench, "ppi": ppi, "passerrank": passerrank}
 
 
 def write(name):  # dedup + write <formatted>/<name>.fasta, return (path, count)

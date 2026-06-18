@@ -18,8 +18,7 @@ work/
 *_tmp/
 *.tmp
 
-# outputs: leakage lists + generated training set
-leakage/
+# generated training set
 trainset.fasta
 
 .actlignore

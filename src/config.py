@@ -5,7 +5,7 @@ from pathlib import Path
 repo = Path(__file__).resolve().parent.parent
 data = repo / "data"
 
-# auto-load repo/.env (KEY=VALUE, $REFS + inline #comments ok) so scripts just run
+# load repo/.env (KEY=VALUE, $REFS and inline #comments allowed) so scripts just run
 _env = repo / ".env"
 if _env.exists():
     for line in _env.read_text().splitlines():
@@ -14,33 +14,31 @@ if _env.exists():
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), os.path.expandvars(v.strip().strip("\"'")))
 
-# uniref90 (downloaded separately) + mmseqs, plus the repo's inputs/outputs
-uniref_dir = Path(os.environ.get("UNIREF_DIR", repo / "uniref"))
-mmseqs     = os.environ.get("MMSEQS", "mmseqs")
-uniref_db  = Path(os.environ.get("UNIREF_DB", uniref_dir / "uniref90_db"))
-uniref_fa  = Path(os.environ.get("UNIREF_FASTA", uniref_dir / "uniref90.fasta.gz"))
-formatted  = Path(os.environ.get("FORMATTED_DIR", data / "formatted"))   # formatted test fastas
-leakage    = Path(os.environ.get("LEAKAGE_DIR", repo / "leakage"))       # <bench>.txt leaked-id lists
-trainset   = Path(os.environ.get("TRAINSET", repo / "trainset.fasta"))   # generated leakage-free set
-work       = Path(os.environ.get("WORK", repo / "work"))                 # mmseqs scratch (ephemeral)
+# uniref90 to sample from + the mmseqs binary (point at a gpu build to use GPU=1)
+uniref_fa = Path(os.environ.get("UNIREF_FASTA", repo / "uniref" / "uniref90.fasta.gz"))
+mmseqs    = os.environ.get("MMSEQS", "mmseqs")
+gpu       = os.environ.get("GPU", "")             # GPU=1 (+ a gpu mmseqs build) runs the check on cuda
 
-# mmseqs + leakage knobs
-threads   = os.environ.get("THREADS", "4")
-maxseqs   = os.environ.get("MAXSEQS", "2000")     # uniref hits kept per test seq
-split_mem = os.environ.get("SPLIT_MEM", "12G")    # mmseqs ram budget
-sens      = os.environ.get("SENS", "7.5")         # mmseqs sensitivity
-evalue    = os.environ.get("EVALUE", "1e-3")      # mmseqs e-value cutoff
-cov       = os.environ.get("COV", "0.8")          # min alignment coverage
-cov_mode  = os.environ.get("COV_MODE", "2")       # 2 = fraction of the test seq covered
-min_id    = float(os.environ.get("MIN_ID", "0.2"))  # >this id to a test seq = leakage
+# repo inputs / outputs
+formatted = Path(os.environ.get("FORMATTED_DIR", data / "formatted"))   # formatted test-set fastas
+trainset  = Path(os.environ.get("TRAINSET", repo / "trainset.fasta"))   # final leakage-free set
+work      = Path(os.environ.get("WORK", repo / "work"))                 # mmseqs scratch (ephemeral)
 
-# training-set sampling (so you don't pull all ~121M)
-train_sample = float(os.environ.get("TRAIN_SAMPLE", "1.0"))  # fraction of safe seqs to keep
-train_size   = int(os.environ.get("TRAIN_SIZE", "0"))        # cap on kept seqs, 0 = no cap
-seed         = int(os.environ.get("SEED", "0"))
+# leakage rule + mmseqs search
+threads  = os.environ.get("THREADS", "8")
+sens     = os.environ.get("SENS", "7.5")            # mmseqs sensitivity
+evalue   = os.environ.get("EVALUE", "1e-3")         # mmseqs e-value cutoff
+cov      = os.environ.get("COV", "0.8")             # min coverage to count as leakage
+cov_mode = os.environ.get("COV_MODE", "1")          # 1 = cover the test seq (catches test-as-subdomain), 0 = both, 2 = train seq
+min_id   = float(os.environ.get("MIN_ID", "0.2"))   # >this identity to a test seq counts as leakage
+
+# sampling: collect this many leakage-free seqs, oversampling each round to cover dropped leakers
+quota      = int(os.environ.get("QUOTA", "1000000"))
+oversample = float(os.environ.get("OVERSAMPLE", "1.5"))
+seed       = int(os.environ.get("SEED", "0"))
 
 
-def iter_fasta(path):  # (id, sequence) pairs from a (optionally gz) fasta
+def iter_fasta(path):  # (id, sequence) pairs from an optionally-gzipped fasta
     op = gzip.open if str(path).endswith(".gz") else open
     with op(path, "rt") as f:
         acc, seq = None, []

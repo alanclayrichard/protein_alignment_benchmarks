@@ -1,4 +1,5 @@
-# torch datasets: the leakage-free training set + the ddG / dms / GO eval benchmarks.
+# torch datasets: the leakage-free training set + the functional eval benchmarks
+# (ddg, dms, go, allobench, ppi, passerrank).
 import ast, csv, sys
 from pathlib import Path
 import pandas as pd
@@ -84,6 +85,16 @@ def _terms(v):  # go column: array or list-repr string, nan if absent
     return list(v) if hasattr(v, "__len__") else []
 
 
+def _asd_site(s):  # "Chain A:PRO150,GLN151; Chain B:ASP6" -> ["A:PRO150", "A:GLN151", "B:ASP6"]
+    out = []
+    for part in (s or "").split(";"):
+        if ":" not in part: continue
+        chain, resis = part.split(":", 1)
+        ch = chain.replace("Chain", "").strip()
+        out += [f"{ch}:{r.strip()}" for r in resis.split(",") if r.strip()]
+    return out
+
+
 class DmsDataset(Dataset):
     # proteingym dms data. item: sequence, mutation, score, assay, dms_id, uniprot.
     # pass assay (Activity|Binding|Expression|OrganismalFitness|Stability) or dms_id to filter.
@@ -104,6 +115,70 @@ class DmsDataset(Dataset):
                     self.items.append({"sequence": seq, "mutation": r["mutant"],
                         "score": float(r["DMS_score"]), "assay": atype,
                         "dms_id": did, "uniprot": uni})
+
+    def __len__(self): return len(self.items)
+
+    def __getitem__(self, i): return self.items[i]
+
+
+class AllobenchDataset(Dataset):
+    # allobench allosteric/active-site proteins. item: sequence, target_id, gene, organism,
+    # uniprot, allosteric_site, active_site (residue lists).
+    def __init__(self, data_dir=repo / "data" / "allobench"):
+        self.items = []
+        with open(Path(data_dir) / "AlloBench.csv", newline="") as f:
+            for r in csv.DictReader(f):
+                s = (r.get("sequence") or "").strip().upper()
+                if not s: continue
+                self.items.append({"sequence": s, "target_id": r.get("target_id", ""),
+                    "gene": r.get("target_gene", ""), "organism": r.get("organism", ""),
+                    "uniprot": r.get("pdb_uniprot", ""),
+                    "allosteric_site": _terms(r.get("allosteric_site_residue", "")),
+                    "active_site": _terms(r.get("active_site_residue", ""))})
+
+    def __len__(self): return len(self.items)
+
+    def __getitem__(self, i): return self.items[i]
+
+
+class PpiDataset(Dataset):
+    # human ppi gold standard. item: sequence_a, sequence_b, id_a, id_b, label, level.
+    # label 1=interacting 0=non; level 0/1/2 = redundancy-reduction stringency (pass level to filter).
+    def __init__(self, level=None, data_dir=repo / "data" / "ppi"):
+        data_dir = Path(data_dir)
+        seqs = dict(c.iter_fasta(data_dir / "human_swissprot_oneliner.fasta"))
+        self.items = []
+        for lvl in (0, 1, 2):
+            if level is not None and lvl != level: continue
+            for label, pol in ((1, "pos"), (0, "neg")):
+                path = data_dir / f"Intra{lvl}_{pol}_rr.txt"
+                if not path.exists(): continue
+                for line in open(path):
+                    p = line.split()
+                    if len(p) >= 2 and p[0] in seqs and p[1] in seqs:
+                        self.items.append({"sequence_a": seqs[p[0]], "sequence_b": seqs[p[1]],
+                            "id_a": p[0], "id_b": p[1], "label": label, "level": lvl})
+
+    def __len__(self): return len(self.items)
+
+    def __getitem__(self, i): return self.items[i]
+
+
+class PasserrankDataset(Dataset):
+    # passerrank allosteric proteins (asd). item: sequence, uniprot, gene, organism, pdb, allosteric_site.
+    def __init__(self, data_dir=repo / "data" / "passerrank"):
+        data_dir = Path(data_dir)
+        seqs = {h.split("|")[1] if "|" in h else h: s
+                for h, s in c.iter_fasta(data_dir / "passerrank.fasta")}
+        self.items = []
+        with open(data_dir / "ASD_Release_201909_AS.txt", newline="") as f:
+            for r in csv.DictReader(f, delimiter="\t"):
+                acc = (r.get("pdb_uniprot") or "").strip()
+                if acc not in seqs: continue
+                self.items.append({"sequence": seqs[acc], "uniprot": acc,
+                    "gene": r.get("target_gene", ""), "organism": r.get("organism", ""),
+                    "pdb": r.get("allosteric_pdb", ""),
+                    "allosteric_site": _asd_site(r.get("allosteric_site_residue", ""))})
 
     def __len__(self): return len(self.items)
 
