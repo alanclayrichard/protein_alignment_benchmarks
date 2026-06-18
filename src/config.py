@@ -1,4 +1,4 @@
-# paths + knobs, all env-overridable (see .env.example). nothing personal hardcoded.
+# paths + knobs, all env-overridable (see .env.example). 
 import gzip, os
 from pathlib import Path
 
