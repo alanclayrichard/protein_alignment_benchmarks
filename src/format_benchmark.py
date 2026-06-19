@@ -52,8 +52,26 @@ def passerrank():  # passerrank allosteric proteins (uniprot seqs fetched from a
         if s: yield s.upper()
 
 
+def pdbbind():  # LP-PDBBind protein-ligand binding affinity, leak-proof TEST split only
+    with open(c.data / "pdbbind" / "LP_PDBBind.csv", newline="") as f:
+        for r in csv.DictReader(f):
+            if r.get("new_split") != "test": continue
+            s = (r.get("seq") or "").strip().upper()
+            if s: yield s
+
+
+def bindingdb():  # BindingDB articles, single-chain target sequences (multichain dropped)
+    chains = "Number of Protein Chains in Target (>1 implies a multichain complex)"
+    with open(c.data / "bindingdb" / "BindingDB_BindingDB_Articles.tsv", newline="") as f:
+        for r in csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE):
+            if (r.get(chains) or "").strip() != "1": continue
+            s = (r.get("BindingDB Target Chain Sequence 1") or "").strip().upper()
+            if s: yield s
+
+
 # name -> test-seq iterator
-ADAPTERS = {"ddg": ddg, "dms": dms, "go": go, "allobench": allobench, "ppi": ppi, "passerrank": passerrank}
+ADAPTERS = {"ddg": ddg, "dms": dms, "go": go, "allobench": allobench, "ppi": ppi,
+            "passerrank": passerrank, "pdbbind": pdbbind, "bindingdb": bindingdb}
 
 
 def write(name):  # dedup + write <formatted>/<name>.fasta, return (path, count)

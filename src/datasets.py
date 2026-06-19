@@ -183,3 +183,65 @@ class PasserrankDataset(Dataset):
     def __len__(self): return len(self.items)
 
     def __getitem__(self, i): return self.items[i]
+
+
+class PdbbindDataset(Dataset):
+    # LP-PDBBind protein-ligand binding affinity (leak-proof split).
+    # item: sequence, pdb, value (pKd/pKi affinity), smiles, split.
+    # pass split (train|val|test) to filter; default test (the eval split).
+    def __init__(self, split="test", data_dir=repo / "data" / "pdbbind"):
+        self.items = []
+        with open(Path(data_dir) / "LP_PDBBind.csv", newline="") as f:
+            for r in csv.DictReader(f):
+                if split and r.get("new_split") != split: continue
+                s = (r.get("seq") or "").strip().upper()
+                v = (r.get("value") or "").strip()
+                if not s or not v: continue
+                self.items.append({"sequence": s, "pdb": r.get("", ""),
+                    "value": float(v), "smiles": (r.get("smiles") or "").strip(),
+                    "split": r.get("new_split", "")})
+
+    def __len__(self): return len(self.items)
+
+    def __getitem__(self, i): return self.items[i]
+
+
+def _affinity(v):  # BindingDB affinity cell -> (relation, nM float); None if unparseable
+    v = (v or "").strip()
+    rel = "="
+    while v and v[0] in "<>=~":
+        rel, v = v[0], v[1:].strip()
+    try: return rel, float(v)
+    except ValueError: return None
+
+
+class BindingdbDataset(Dataset):
+    # BindingDB curated protein-ligand binding affinities (articles subset), single-chain only.
+    # item: sequence, uniprot, target_name, organism, smiles, measure, value (nM), relation.
+    # one affinity per row by priority IC50 > Ki > Kd > EC50; rows w/o a parseable affinity skipped.
+    _aff = [("IC50", "IC50 (nM)"), ("Ki", "Ki (nM)"), ("Kd", "Kd (nM)"), ("EC50", "EC50 (nM)")]
+
+    def __init__(self, data_dir=repo / "data" / "bindingdb"):
+        self.items = []
+        chains = "Number of Protein Chains in Target (>1 implies a multichain complex)"
+        with open(Path(data_dir) / "BindingDB_BindingDB_Articles.tsv", newline="") as f:
+            for r in csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE):
+                if (r.get(chains) or "").strip() != "1": continue
+                s = (r.get("BindingDB Target Chain Sequence 1") or "").strip().upper()
+                if not s: continue
+                hit = None
+                for m, col in self._aff:
+                    p = _affinity(r.get(col))
+                    if p: hit = (m, p); break
+                if not hit: continue
+                measure, (relation, value) = hit
+                self.items.append({"sequence": s,
+                    "uniprot": (r.get("UniProt (SwissProt) Primary ID of Target Chain 1") or "").strip(),
+                    "target_name": (r.get("Target Name") or "").strip(),
+                    "organism": (r.get("Target Source Organism According to Curator or DataSource") or "").strip(),
+                    "smiles": (r.get("Ligand SMILES") or "").strip(),
+                    "measure": measure, "value": value, "relation": relation})
+
+    def __len__(self): return len(self.items)
+
+    def __getitem__(self, i): return self.items[i]
