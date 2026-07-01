@@ -54,7 +54,8 @@ needs torch (`uv sync --extra torch`), with the venv activated:
 ```python
 import sys; sys.path.insert(0, "src")
 from datasets import (TrainSet, DdgDataset, DmsDataset, GoDataset,
-                      AllobenchDataset, PpiDataset, PasserrankDataset)
+                      AllobenchDataset, PpiDataset, PasserrankDataset,
+                      PdbbindDataset, BindingdbDataset)
 
 train = TrainSet()                         # {sequence, id} — the leakage-free align set (id = uniprot code)
 ddg   = DdgDataset(dataset="megascale")    # {sequence, mutation, ddg, pdb, dataset}
@@ -63,6 +64,8 @@ go    = GoDataset()                         # {sequence, protein_id, organism, g
 allo  = AllobenchDataset()                  # {sequence, target_id, gene, organism, uniprot, allosteric_site, active_site}
 ppi   = PpiDataset(level=0)                 # {sequence_a, sequence_b, id_a, id_b, label, level}
 pr    = PasserrankDataset()                 # {sequence, uniprot, gene, organism, pdb, allosteric_site}
+pdb   = PdbbindDataset()                    # {sequence, pdb, value, smiles, split} — LP-PDBBind affinity, test split
+bdb   = BindingdbDataset()                  # {sequence, uniprot, target_name, organism, smiles, measure, value, relation}
 ```
 
 ## datasets
@@ -75,6 +78,8 @@ pr    = PasserrankDataset()                 # {sequence, uniprot, gene, organism
 | allobench | allobench allosteric/active sites | 425 |
 | ppi | human ppi gold standard (figshare) | 11,019 |
 | passerrank | passerrank allosteric set (ASD) | 333 |
+| pdbbind | LP-PDBBind protein–ligand affinity (test split) | 2,644 |
+| bindingdb | bindingdb articles, protein–ligand affinity (single-chain targets) | 2,157 |
 
 sample pool: uniref90, ~121M sequences.
 
